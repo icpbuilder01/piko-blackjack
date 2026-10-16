@@ -35,6 +35,8 @@ import {
   playDealSequence,
 } from "./lib/sound";
 import "./App.css";
+import "./theme.css";
+import { AppNav } from "./components/AppNav";
 
 const STATS_POLL_MS = 8000;
 // How many rounds' worth of allowance to approve at once -- same idea as
@@ -506,7 +508,7 @@ function App() {
   }
 
   return (
-    <main className="page">
+    <main className="page app-shell">
       <Confetti trigger={confettiTrigger} />
       {showWallet && identity && (
         <Wallet
@@ -517,58 +519,48 @@ function App() {
         />
       )}
 
-      <header className="header">
-        <div className="brand">
-          <img src="/piko-logo.svg" alt="" className="brand-logo" />
-          <div className="brand-text">
-            <span className="brand-name">&#127183; PikoBlackjack</span>
-            <span className="brand-ticker">Provably-fair, bet in PIKO</span>
-          </div>
-        </div>
-        <div className="wallet-box">
-          <button className="button secondary small mute-button" onClick={handleToggleMute} aria-label={muted ? "Unmute sound" : "Mute sound"}>
-            {muted ? "\u{1F507}" : "\u{1F50A}"}
+      <AppNav current="blackjack">
+        <button className="button secondary small mute-button" onClick={handleToggleMute} aria-label={muted ? "Unmute sound" : "Mute sound"}>
+          {muted ? "\u{1F507}" : "\u{1F50A}"}
+        </button>
+        {identity && (
+          <button className="button secondary small wallet-balance-button" onClick={() => setShowWallet(true)}>
+            {balance !== null ? <ChipAmount amount={balance} unit="PIKO" decimals={2} /> : "Wallet"}
           </button>
-          {identity && (
-            <button className="button secondary small wallet-balance-button" onClick={() => setShowWallet(true)}>
-              {balance !== null ? <ChipAmount amount={balance} unit="PIKO" decimals={2} /> : "Wallet"}
+        )}
+        {identity ? (
+          <button className="button secondary small" onClick={handleLogout}>
+            Log out
+          </button>
+        ) : (
+          identityLoaded && (
+            <button className="button" onClick={handleLogin}>
+              Log in
             </button>
-          )}
-          {identity ? (
-            <button className="button secondary" onClick={handleLogout}>
-              Log out
-            </button>
-          ) : (
-            identityLoaded && (
-              <button className="button" onClick={handleLogin}>
-                Log in with Internet Identity
-              </button>
-            )
-          )}
-        </div>
-      </header>
+          )
+        )}
+      </AppNav>
+
+      <div className="app-title">
+        <h1>
+          Beat <em>the dealer.</em>
+        </h1>
+        <p className="app-sub">
+          Single-deck, fully on-chain
+          <span className="tag">Provably fair</span>
+          <span className="tag spark">Real Hit/Stand, disclosed rules</span>
+          <span className="tag">No login needed to watch</span>
+        </p>
+      </div>
 
       {!identityLoaded || !config ? (
         <div className="empty-state">Loading...</div>
       ) : (
         <>
-          {!identity && (
-            <section className="hero">
-              <div className="tag-row">
-                <span className="tag">Provably fair</span>
-                <span className="tag spark">Real Hit/Stand, disclosed rules</span>
-                <span className="tag">No login needed to watch</span>
-              </div>
-              <h1>Beat the dealer.</h1>
-              <p>
-                Single-deck Blackjack, fully on-chain: the whole deck is shuffled by the Internet Computer's own
-                threshold randomness the moment you deal -- not a client-side RNG, not a "trust us" seed. The rules
-                below are the real ones the canister uses. Log in with Internet Identity to play.
-              </p>
-            </section>
-          )}
 
-          <section className="block slot-panel">
+          <div className="app-grid">
+          <div className="app-main">
+          <section className="block slot-panel game-panel">
             <h2>
               Blackjack <span className="section-icon">&#127183;</span>
             </h2>
@@ -678,8 +670,12 @@ function App() {
             )}
 
             {message && <p className="error-text">{message}</p>}
+            <p className="section-intro game-fine">
+              The whole deck is shuffled by the Internet Computer's own threshold randomness the moment you deal --
+              not a client-side RNG, not a "trust us" seed. The rules shown on the table are the real ones the
+              canister uses.{!identity && " Log in with Internet Identity to play."}
+            </p>
           </section>
-
           <section className="block">
             <h2>
               Top players <span className="section-icon">&#127942;</span>
@@ -713,6 +709,9 @@ function App() {
               </table>
             </div>
           </section>
+          </div>
+
+          <aside className="app-side">
 
           <section className="block">
             <h2>
@@ -764,6 +763,9 @@ function App() {
               </table>
             </div>
           </section>
+
+          </aside>
+          </div>
 
           <footer className="footer">
             <p>
