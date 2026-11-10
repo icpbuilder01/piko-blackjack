@@ -57,8 +57,11 @@ actor self {
   transient let BLACKJACK_PAYOUT_BPS_LIVE : Nat = 25_000; // natural blackjack pays 3:2 -- 2.5x total return
   transient let WIN_PAYOUT_BPS_LIVE : Nat = 20_000; // an ordinary win pays 2:1 -- 2x total return
   transient let PUSH_PAYOUT_BPS_LIVE : Nat = 10_000; // a tie returns the stake, 1x
-  transient let DEALER_STANDS_ON_LIVE : Nat = 17; // dealer hits below this, stands at/above it -- no soft-17 exception
-  transient let ROUND_EXPIRY_NANOS_LIVE : Int = 24 * 60 * 60 * 1_000_000_000; // 24h -- see resolveExpiredRound below
+  transient let DEALER_STANDS_ON_LIVE : Nat = 17; // dealer hits below this, stands at/above it, except on a soft 17 (see dealerMustDraw)
+  // 1h, was 24h: an open round's reservation counts against the bankroll cap
+  // shared by every player, so one abandoned max bet blocked the whole table
+  // for a day (2026-11-10 audit). See resolveExpiredRound below.
+  transient let ROUND_EXPIRY_NANOS_LIVE : Int = 60 * 60 * 1_000_000_000;
 
   func payoutBpsFor(status : Types.ResolvedStatus) : Nat {
     switch (status) {
@@ -155,6 +158,15 @@ actor self {
   // needing that is what determines whether the dealer needs to draw at
   // all (skip entirely if every hand already resolved itself, e.g. all
   // busted, or a natural was already decided at deal() time).
+  // The dealer hits a soft 17 and splits of Aces get one card each (see
+  // split()). With the earlier rules (stand on every 17, Aces hit freely) an
+  // exact calculation gave a perfect player +0.17% over a bankroll nobody can
+  // refill; these two give the house about 0.16% (2026-11-10 audit).
+  func dealerMustDraw(cards : [Nat8]) : Bool {
+    let total = Cards.handTotal(cards);
+    total < DEALER_STANDS_ON_LIVE or (total == DEALER_STANDS_ON_LIVE and Cards.isSoft(cards));
+  };
+
   func dealerNeedsToPlay(hands : [PlayerHand]) : Bool {
     switch (Array.find<PlayerHand>(hands, func(h) { h.status == null })) {
       case (?_) { true };
@@ -439,6 +451,8 @@ actor self {
     {
       deckCount = 1;
       dealerStandsOn = DEALER_STANDS_ON_LIVE;
+      dealerHitsSoft17 = true;
+      oneCardOnSplitAces = true;
       blackjackPayoutBps = BLACKJACK_PAYOUT_BPS_LIVE;
       doubleDownAllowed = true;
       splitAllowed = true;
@@ -572,7 +586,7 @@ actor self {
   // once, and pays out the sum if anything is owed.
   func finalizeWholeRound(player : Principal, round : Round) : async* Types.BlackjackView {
     if (dealerNeedsToPlay(round.hands)) {
-      while (Cards.handTotal(round.dealerCards) < DEALER_STANDS_ON_LIVE) {
+      while (dealerMustDraw(round.dealerCards)) {
         let card = round.deck[round.nextIndex];
         round.nextIndex += 1;
         round.dealerCards := Array.concat(round.dealerCards, [card]);
@@ -1045,7 +1059,14 @@ actor self {
                   { var cards = [original.cards[1], card2]; var betAmount = round.amount; var done = false; var status = null },
                 ];
                 round.activeHandIndex := 0;
-                #Ok(viewOf(round));
+                if (Cards.rankOf(original.cards[0]) == 12) {
+                  // Aces: one card each, then straight to the dealer.
+                  for (h in round.hands.vals()) { h.done := true };
+                  let view = await* finalizeWholeRound(caller, round);
+                  #Ok(view);
+                } else {
+                  #Ok(viewOf(round));
+                };
               };
               case null {
                 // See doubleDown()'s identical branch: reservedPayout was
@@ -1100,7 +1121,7 @@ actor self {
   };
 
   // Permissionless, but only once a round has genuinely sat open past
-  // ROUND_EXPIRY_NANOS (24h, see getRules()) -- bounds worst-case aggregate
+  // ROUND_EXPIRY_NANOS (see getRules()) -- bounds worst-case aggregate
   // committedPayout exposure from abandoned rounds to "however many can be
   // opened in one expiry window", rather than "until an admin happens to
   // notice". Anyone can call this for anyone; it can only ever conclude an
