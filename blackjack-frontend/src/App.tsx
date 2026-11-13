@@ -39,6 +39,8 @@ import "./theme.css";
 import { AppNav } from "./components/AppNav";
 
 const STATS_POLL_MS = 8000;
+const MIN_BET_E8S = 100_000_000n; // 1 PIKO, enforced by the canister too
+const BANKROLL_REFRESH_MS = 5 * 60_000; // matches the canister's once-per-5-min getStats window
 // How many rounds' worth of allowance to approve at once -- same idea as
 // dice-frontend's APPROVE_ROLLS: big enough that a rapid session of play
 // doesn't mean a wallet popup before every single bet, small enough that
@@ -57,7 +59,7 @@ function blackjackErrorMessage(err: BlackjackError): string {
     case "TooSoon":
       return "Slow down a little -- try again in a moment.";
     case "InvalidAmount":
-      return "Enter a valid bet amount.";
+      return "Enter a valid bet amount (minimum 1 PIKO).";
     case "RandomnessFailed":
       return "Couldn't draw a fair shuffle -- your stake was refunded, claim it below.";
     case "RoundAlreadyOpen":
@@ -158,7 +160,7 @@ function App() {
 
   const refreshConfigAndBankroll = useCallback(async () => {
     try {
-      const [c, stats] = await Promise.all([getBlackjackActor().getConfig(), getBlackjackActor().getStats()]);
+      const [c, stats] = await Promise.all([getBlackjackActor().getConfig(), getBlackjackActor().getStatsView()]);
       setConfig(c);
       setBankroll(stats.pikoBankroll);
     } catch (err) {
@@ -172,6 +174,16 @@ function App() {
     const id = setInterval(refreshConfigAndBankroll, STATS_POLL_MS);
     return () => clearInterval(id);
   }, [refreshConfigAndBankroll]);
+
+  // getStatsView is a free query that serves the canister's cached bankroll.
+  // The paid getStats re-reads the real balances; the canister accepts it at
+  // most once every 5 minutes from anyone, so a refused call is expected.
+  useEffect(() => {
+    const nudge = () => { getBlackjackActor().getStats().catch(() => {}); };
+    nudge();
+    const id = setInterval(nudge, BANKROLL_REFRESH_MS);
+    return () => clearInterval(id);
+  }, []);
 
   // Separate from the config/bankroll poll above on purpose: the leaderboard
   // and recent-bets tables are below-the-fold ambient content, not needed to
@@ -266,7 +278,9 @@ function App() {
     setMutedState(next);
   }
 
-  const amount = parseAmount(amountInput);
+  const parsedAmount = parseAmount(amountInput);
+  // Below the minimum counts as no valid amount: Approve and Deal stay disabled.
+  const amount = parsedAmount !== null && parsedAmount >= MIN_BET_E8S ? parsedAmount : null;
   const feeApproved = amount !== null ? (allowance ?? 0n) >= amount + PIKO_LEDGER_FEE_E8S : false;
   const handOpen = openRound?.__kind__ === "Open";
 
