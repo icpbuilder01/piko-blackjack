@@ -4,7 +4,7 @@ import { Principal } from "@icp-sdk/core/principal";
 import { getLedgerActor, getBlackjackActor } from "./lib/actors";
 import { login, logout, getStoredIdentity } from "./lib/auth";
 import { blackjackCanisterId } from "./lib/canister-env";
-import { formatCompact, formatPiko, parseAmount, shortPrincipal, timeAgo } from "./lib/format";
+import { formatCompact, formatPiko, parseAmount, shortPrincipal, timeAgo, refusalText } from "./lib/format";
 import { Wallet } from "./components/Wallet";
 import { ChipAmount } from "./components/ChipAmount";
 import { PikoIcon } from "./components/PikoIcon";
@@ -311,7 +311,7 @@ function App() {
       }
     } catch (err) {
       console.error("Approval failed", err);
-      showMessage("Approval failed -- try again.");
+      showMessage(refusalText(err) ?? "Approval failed -- try again.");
     } finally {
       setApproving(false);
     }
@@ -407,7 +407,7 @@ function App() {
       refreshAllowance(id);
     } catch (err) {
       console.error("Deal failed", err);
-      showMessage("Deal failed -- try again.");
+      showMessage(refusalText(err) ?? "Deal failed -- try again.");
       setDealing(false);
       refreshAllowance(id);
     }
@@ -430,7 +430,7 @@ function App() {
       setActing(false);
     } catch (err) {
       console.error("Hit failed", err);
-      showMessage("Hit failed -- try again.");
+      showMessage(refusalText(err) ?? "Hit failed -- try again.");
       setActing(false);
     }
   }
@@ -451,7 +451,7 @@ function App() {
       setActing(false);
     } catch (err) {
       console.error("Stand failed", err);
-      showMessage("Stand failed -- try again.");
+      showMessage(refusalText(err) ?? "Stand failed -- try again.");
       setActing(false);
     }
   }
@@ -474,7 +474,7 @@ function App() {
       if (identity) refreshAllowance(identity);
     } catch (err) {
       console.error("Double down failed", err);
-      showMessage("Double down failed -- try again.");
+      showMessage(refusalText(err) ?? "Double down failed -- try again.");
       setActing(false);
     }
   }
@@ -497,7 +497,7 @@ function App() {
       if (identity) refreshAllowance(identity);
     } catch (err) {
       console.error("Split failed", err);
-      showMessage("Split failed -- try again.");
+      showMessage(refusalText(err) ?? "Split failed -- try again.");
       setActing(false);
     }
   }
@@ -517,7 +517,7 @@ function App() {
       }
     } catch (err) {
       console.error("Claim payout failed", err);
-      showMessage("Couldn't check for a pending payout -- try again later.");
+      showMessage(refusalText(err) ?? "Couldn't check for a pending payout -- try again later.");
     }
   }
 
